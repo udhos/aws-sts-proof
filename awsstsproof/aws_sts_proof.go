@@ -12,7 +12,6 @@ type Body struct {
 	Method  string `json:"iam_http_request_method"`
 	URL     string `json:"iam_request_url"`
 	Headers string `json:"iam_request_headers"`
-	Body    string `json:"iam_request_body"`
 }
 
 // Param represents body parameters.
@@ -20,7 +19,6 @@ type Param struct {
 	Method  string
 	URL     string
 	Headers http.Header
-	Body    []byte
 }
 
 // Marshal encodes the body as JSON.
@@ -45,7 +43,6 @@ func NewBody(input Param) (Body, error) {
 		Method:  input.Method,
 		URL:     base64.StdEncoding.EncodeToString([]byte(input.URL)),
 		Headers: base64.StdEncoding.EncodeToString(headersJSON),
-		Body:    base64.StdEncoding.EncodeToString(input.Body),
 	}, nil
 }
 
@@ -68,16 +65,9 @@ func (b *Body) Decode() (out Param, err error) {
 		return
 	}
 
-	body, errBody := base64.StdEncoding.DecodeString(b.Body)
-	if errBody != nil {
-		err = errBody
-		return
-	}
-
 	out.Method = b.Method
 	out.URL = string(u)
 	out.Headers = headers
-	out.Body = body
 
 	return
 }

@@ -40,7 +40,8 @@ func main() {
 	// as the proof request target (URL + signed headers)
 	presignClient := sts.NewPresignClient(clientSts)
 
-	presigned, errPresign := presignClient.PresignGetCallerIdentity(context.TODO(), &sts.GetCallerIdentityInput{})
+	presigned, errPresign := presignClient.PresignGetCallerIdentity(context.TODO(),
+		&sts.GetCallerIdentityInput{})
 	if errPresign != nil {
 		log.Fatalf("presign error: %v", errPresign)
 	}
@@ -64,7 +65,6 @@ func main() {
 		Method:  method,
 		URL:     presigned.URL,
 		Headers: headers,
-		Body:    reqBody,
 	}
 
 	body, errBody := awsstsproof.NewBody(input)

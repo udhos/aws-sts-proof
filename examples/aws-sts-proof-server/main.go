@@ -11,31 +11,13 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/udhos/aws-sts-proof/awsstsproof"
-	"github.com/udhos/boilerplate/awsconfig"
 )
 
 type application struct {
-	awsConfig aws.Config
-	//stsClient *sts.Client
 }
 
 func main() {
-
-	//
-	// aws config
-	//
-
-	options := awsconfig.Options{}
-	awsCfg, errCfg := awsconfig.AwsConfig(options)
-	if errCfg != nil {
-		log.Fatalf("could not get aws config: %v", errCfg)
-	}
-
-	log.Printf("STS account ID: %s\n", awsCfg.StsAccountID)
-	log.Printf("STS ARN: %s\n", awsCfg.StsArn)
-	log.Printf("STS UserId: %s\n", awsCfg.StsUserID)
 
 	const addr = ":8080"
 	const pathHealth = "/health"
@@ -47,10 +29,7 @@ func main() {
 		Handler: mux,
 	}
 
-	app := &application{
-		awsConfig: awsCfg.AwsConfig,
-		//stsClient: sts.NewFromConfig(awsCfg.AwsConfig),
-	}
+	app := &application{}
 
 	const root = "/"
 
@@ -129,7 +108,7 @@ func handlerToken(w http.ResponseWriter, r *http.Request, _ *application) {
 
 	// Forward the presigned request to AWS using a plain HTTP client
 	log.Printf("%s %s %s - raw body: %v", r.RemoteAddr, r.Method, r.RequestURI, string(reqBody))
-	log.Printf("%s %s %s - body:%s body-to-string:%s", r.RemoteAddr, r.Method, r.RequestURI, string(toJSON(param)), string(param.Body))
+	log.Printf("%s %s %s - body:%s", r.RemoteAddr, r.Method, r.RequestURI, string(toJSON(param)))
 
 	// validate presigned request looks like STS GetCallerIdentity
 	if param.Method == "" {
