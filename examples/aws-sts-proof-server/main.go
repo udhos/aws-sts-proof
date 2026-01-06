@@ -104,11 +104,12 @@ func handlerToken(w http.ResponseWriter, r *http.Request, _ *application) {
 		return
 	}
 
-	//log.Printf("FIXME %v", app.stsClient)
-
-	// Forward the presigned request to AWS using a plain HTTP client
 	log.Printf("%s %s %s - raw body: %v", r.RemoteAddr, r.Method, r.RequestURI, string(reqBody))
 	log.Printf("%s %s %s - body:%s", r.RemoteAddr, r.Method, r.RequestURI, string(toJSON(param)))
+
+	//
+	// Forward the presigned request to AWS using a plain HTTP client
+	//
 
 	// validate presigned request looks like STS GetCallerIdentity
 	if param.Method == "" {
@@ -176,8 +177,6 @@ func handlerToken(w http.ResponseWriter, r *http.Request, _ *application) {
 		response(w, r, http.StatusBadGateway, errRead.Error())
 		return
 	}
-
-	//log.Printf("sts response: %s", string(respData))
 
 	// Parse STS GetCallerIdentity XML response
 	var stsResp struct {
