@@ -35,18 +35,34 @@ func main() {
 	//
 
 	clientSts := sts.NewFromConfig(awsCfg.AwsConfig)
-	log.Printf("FIXME TODO REMOVEME %v", clientSts)
 
-	//
-	// FIXME TODO WRITEME: create sts getGetCallerIdentify pre-signed request
-	//
+	// create a presigned STS GetCallerIdentity request and use it
+	// as the proof request target (URL + signed headers)
+	presignClient := sts.NewPresignClient(clientSts)
+
+	presigned, errPresign := presignClient.PresignGetCallerIdentity(context.TODO(), &sts.GetCallerIdentityInput{})
+	if errPresign != nil {
+		log.Fatalf("presign error: %v", errPresign)
+	}
 
 	headers := http.Header{}
+	// presigned.SignedHeader is a map[string][]string; copy into http.Header
+	for k, vv := range presigned.SignedHeader {
+		for _, v := range vv {
+			headers.Add(k, v)
+		}
+	}
+
 	reqBody := []byte("test-request-body")
 
+	method := presigned.Method
+	if method == "" {
+		method = "GET"
+	}
+
 	input := awsstsproof.Param{
-		Method:  "GET",
-		URL:     "https://localhost:3000",
+		Method:  method,
+		URL:     presigned.URL,
 		Headers: headers,
 		Body:    reqBody,
 	}
