@@ -9,13 +9,32 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/udhos/aws-sts-proof/awsstsproof"
+	"github.com/udhos/boilerplate/awsconfig"
 )
 
 type application struct {
+	awsConfig aws.Config
+	stsClient *sts.Client
 }
 
 func main() {
+
+	//
+	// aws config
+	//
+
+	options := awsconfig.Options{}
+	awsCfg, errCfg := awsconfig.AwsConfig(options)
+	if errCfg != nil {
+		log.Fatalf("could not get aws config: %v", errCfg)
+	}
+
+	log.Printf("STS account ID: %s\n", awsCfg.StsAccountID)
+	log.Printf("STS ARN: %s\n", awsCfg.StsArn)
+	log.Printf("STS UserId: %s\n", awsCfg.StsUserID)
 
 	const addr = ":8080"
 	const pathHealth = "/health"
@@ -27,7 +46,10 @@ func main() {
 		Handler: mux,
 	}
 
-	app := &application{}
+	app := &application{
+		awsConfig: awsCfg.AwsConfig,
+		stsClient: sts.NewFromConfig(awsCfg.AwsConfig),
+	}
 
 	const root = "/"
 
@@ -81,7 +103,7 @@ func handlerHealth(w http.ResponseWriter, r *http.Request) {
 	response(w, r, http.StatusOK, "health ok")
 }
 
-func handlerToken(w http.ResponseWriter, r *http.Request, _ *application) {
+func handlerToken(w http.ResponseWriter, r *http.Request, app *application) {
 
 	reqBody, errBody := io.ReadAll(r.Body)
 	if errBody != nil {
@@ -101,6 +123,13 @@ func handlerToken(w http.ResponseWriter, r *http.Request, _ *application) {
 		response(w, r, http.StatusBadRequest, errParam.Error())
 		return
 	}
+
+	log.Printf("FIXME %v", app.stsClient)
+
+	//
+	// FIXME WRITEME Get presigned request received on param (method, url, header),
+	// send it to AWS, get UserID from aws response.
+	//
 
 	log.Printf("%s %s %s - raw body: %v", r.RemoteAddr, r.Method, r.RequestURI, string(reqBody))
 
