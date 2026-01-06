@@ -93,6 +93,8 @@ func main() {
 		log.Fatalf("http send error: %v", errDo)
 	}
 
+	defer resp.Body.Close()
+
 	log.Printf("response status: %d", resp.StatusCode)
 
 	respBody, errRead := io.ReadAll(resp.Body)
