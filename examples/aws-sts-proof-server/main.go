@@ -178,6 +178,11 @@ func handlerToken(w http.ResponseWriter, r *http.Request, _ *application) {
 		return
 	}
 
+	if respAws.StatusCode != 200 {
+		response(w, r, http.StatusBadGateway, fmt.Sprintf("bad status=%d body:%s", respAws.StatusCode, string(respData)))
+		return
+	}
+
 	// Parse STS GetCallerIdentity XML response
 	var stsResp struct {
 		Result struct {
