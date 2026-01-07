@@ -54,15 +54,8 @@ func main() {
 		}
 	}
 
-	reqBody := []byte("test-request-body")
-
-	method := presigned.Method
-	if method == "" {
-		method = "GET"
-	}
-
 	input := awsstsproof.Param{
-		Method:  method,
+		Method:  presigned.Method,
 		URL:     presigned.URL,
 		Headers: headers,
 	}
@@ -77,11 +70,12 @@ func main() {
 		log.Fatalf("json error: %v", errJSON)
 	}
 
-	log.Printf("raw request: body:%s body-to-string:%s", string(bodyBytes), string(reqBody))
+	log.Printf("raw request: body:%s", string(bodyBytes))
 
 	reader := bytes.NewBuffer(bodyBytes)
 
-	req, errReq := http.NewRequestWithContext(context.TODO(), "POST", "http://localhost:8080/auth", reader)
+	req, errReq := http.NewRequestWithContext(context.TODO(),
+		"POST", "http://localhost:8080/auth", reader)
 	if errReq != nil {
 		log.Fatalf("request error: %v", errReq)
 	}
