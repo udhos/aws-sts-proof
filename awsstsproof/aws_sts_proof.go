@@ -129,17 +129,19 @@ func VerifyPresignedGetCallerIdentity(ctx context.Context, client *http.Client,
 	}
 
 	if presigned.Method != "GET" {
-		return resp, http.StatusBadRequest, fmt.Errorf("presigned request must be GET")
+		return resp, http.StatusBadRequest, fmt.Errorf("presigned request must be GET: method=%q", presigned.Method)
 	}
 
 	u, errParse := url.Parse(presigned.URL)
 	if errParse != nil {
-		return resp, http.StatusBadRequest, fmt.Errorf("invalid url in presigned request")
+		return resp, http.StatusBadRequest, fmt.Errorf("invalid url in presigned request: url=%q: %v",
+			presigned.URL, errParse)
 	}
 
 	// require Query Action=GetCallerIdentity
-	if u.Query().Get("Action") != "GetCallerIdentity" {
-		return resp, http.StatusBadRequest, fmt.Errorf("presigned request Action is not GetCallerIdentity")
+	if action := u.Query().Get("Action"); action != "GetCallerIdentity" {
+		return resp, http.StatusBadRequest,
+			fmt.Errorf("presigned request Action is not GetCallerIdentity: action=%q", action)
 	}
 
 	// require signature: either Authorization header or X-Amz-Signature in query or headers
