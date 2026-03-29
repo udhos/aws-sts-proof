@@ -33,7 +33,7 @@ func main() {
 
 	register(mux, addr, root, handlerRoot)
 	register(mux, addr, pathHealth, handlerHealth)
-	register(mux, addr, pathAuth, func(w http.ResponseWriter, r *http.Request) { handlerToken(w, r, app) })
+	register(mux, addr, pathAuth, func(w http.ResponseWriter, r *http.Request) { handlerAuth(w, r, app) })
 
 	go listenAndServe(server, addr)
 
@@ -81,7 +81,7 @@ func handlerHealth(w http.ResponseWriter, r *http.Request) {
 	response(w, r, http.StatusOK, "health ok")
 }
 
-func handlerToken(w http.ResponseWriter, r *http.Request, _ *application) {
+func handlerAuth(w http.ResponseWriter, r *http.Request, _ *application) {
 
 	reqBody, errBody := io.ReadAll(r.Body)
 	if errBody != nil {
