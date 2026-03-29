@@ -13,6 +13,7 @@ import (
 	"net/url"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
@@ -21,13 +22,6 @@ type Body struct {
 	Method  string `json:"iam_http_request_method"`
 	URL     string `json:"iam_request_url"`
 	Headers string `json:"iam_request_headers"`
-}
-
-// Param represents body parameters.
-type Param struct {
-	Method  string
-	URL     string
-	Headers http.Header
 }
 
 // Marshal encodes the body as JSON.
@@ -41,22 +35,22 @@ func Unmarshal(data []byte, v *Body) error {
 }
 
 // NewBody creates a body.
-func NewBody(input Param) (Body, error) {
+func NewBody(presigned *v4.PresignedHTTPRequest) (Body, error) {
 
-	headersJSON, err := json.Marshal(input.Headers)
+	headersJSON, err := json.Marshal(presigned.SignedHeader)
 	if err != nil {
 		return Body{}, err
 	}
 
 	return Body{
-		Method:  input.Method,
-		URL:     base64.StdEncoding.EncodeToString([]byte(input.URL)),
+		Method:  presigned.Method,
+		URL:     base64.StdEncoding.EncodeToString([]byte(presigned.URL)),
 		Headers: base64.StdEncoding.EncodeToString(headersJSON),
 	}, nil
 }
 
 // Decode extracts parameters from body.
-func (b *Body) Decode() (out Param, err error) {
+func (b *Body) Decode() (out *v4.PresignedHTTPRequest, err error) {
 	u, errURL := base64.StdEncoding.DecodeString(b.URL)
 	if errURL != nil {
 		err = errURL
@@ -74,15 +68,17 @@ func (b *Body) Decode() (out Param, err error) {
 		return
 	}
 
+	out = &v4.PresignedHTTPRequest{}
+
 	out.Method = b.Method
 	out.URL = string(u)
-	out.Headers = headers
+	out.SignedHeader = headers
 
 	return
 }
 
 // PresignGetCallerIdentity creates a presigned STS GetCallerIdentity request and returns the parameters.
-func PresignGetCallerIdentity(awsConfig aws.Config) (Param, error) {
+func PresignGetCallerIdentity(awsConfig aws.Config) (*v4.PresignedHTTPRequest, error) {
 	//
 	// sts client
 	//
@@ -96,16 +92,10 @@ func PresignGetCallerIdentity(awsConfig aws.Config) (Param, error) {
 	presigned, errPresign := presignClient.PresignGetCallerIdentity(context.TODO(),
 		&sts.GetCallerIdentityInput{})
 	if errPresign != nil {
-		return Param{}, fmt.Errorf("presign error: %v", errPresign)
+		return nil, fmt.Errorf("presign error: %v", errPresign)
 	}
 
-	input := Param{
-		Method:  presigned.Method,
-		URL:     presigned.URL,
-		Headers: presigned.SignedHeader,
-	}
-
-	return input, nil
+	return presigned, nil
 }
 
 // VerifyResponse represents the response from AWS STS GetCallerIdentity.
@@ -122,7 +112,7 @@ type VerifyResult struct {
 
 // VerifyPresignedGetCallerIdentity forwards the presigned request to AWS and returns the response.
 func VerifyPresignedGetCallerIdentity(ctx context.Context, client *http.Client,
-	param Param) (VerifyResponse, int, error) {
+	presigned *v4.PresignedHTTPRequest) (VerifyResponse, int, error) {
 
 	//
 	// Forward the presigned request to AWS using a plain HTTP client
@@ -131,18 +121,18 @@ func VerifyPresignedGetCallerIdentity(ctx context.Context, client *http.Client,
 	var resp VerifyResponse
 
 	// validate presigned request looks like STS GetCallerIdentity
-	if param.Method == "" {
+	if presigned.Method == "" {
 		return resp, http.StatusBadRequest, fmt.Errorf("missing method in presigned request")
 	}
-	if param.URL == "" {
+	if presigned.URL == "" {
 		return resp, http.StatusBadRequest, fmt.Errorf("missing url in presigned request")
 	}
 
-	if param.Method != "GET" {
+	if presigned.Method != "GET" {
 		return resp, http.StatusBadRequest, fmt.Errorf("presigned request must be GET")
 	}
 
-	u, errParse := url.Parse(param.URL)
+	u, errParse := url.Parse(presigned.URL)
 	if errParse != nil {
 		return resp, http.StatusBadRequest, fmt.Errorf("invalid url in presigned request")
 	}
@@ -154,24 +144,24 @@ func VerifyPresignedGetCallerIdentity(ctx context.Context, client *http.Client,
 
 	// require signature: either Authorization header or X-Amz-Signature in query or headers
 	hasAuth := false
-	if _, ok := param.Headers["Authorization"]; ok {
+	if _, ok := presigned.SignedHeader["Authorization"]; ok {
 		hasAuth = true
 	}
 	if u.Query().Get("X-Amz-Signature") != "" {
 		hasAuth = true
 	}
-	if _, ok := param.Headers["X-Amz-Signature"]; ok {
+	if _, ok := presigned.SignedHeader["X-Amz-Signature"]; ok {
 		hasAuth = true
 	}
 	if !hasAuth {
 		return resp, http.StatusBadRequest, fmt.Errorf("presigned request missing signature")
 	}
 
-	reqToAws, errReq := http.NewRequestWithContext(ctx, param.Method, param.URL, nil)
+	reqToAws, errReq := http.NewRequestWithContext(ctx, presigned.Method, presigned.URL, nil)
 	if errReq != nil {
 		return resp, http.StatusBadRequest, fmt.Errorf("error creating request to AWS: %v", errReq)
 	}
-	for k, vv := range param.Headers {
+	for k, vv := range presigned.SignedHeader {
 		for _, v := range vv {
 			reqToAws.Header.Add(k, v)
 		}

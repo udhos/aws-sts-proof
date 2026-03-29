@@ -35,7 +35,7 @@ func main() {
 	}
 
 	log.Printf("Presigned STS GetCallerIdentity request: method:%s url:%s headers:%v",
-		input.Method, input.URL, input.Headers)
+		input.Method, input.URL, input.SignedHeader)
 
 	body, errBody := awsstsproof.NewBody(input)
 	if errBody != nil {
