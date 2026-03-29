@@ -3,12 +3,10 @@ package main
 
 import (
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 
 	"github.com/udhos/aws-sts-proof/awsstsproof"
@@ -111,94 +109,14 @@ func handlerToken(w http.ResponseWriter, r *http.Request, _ *application) {
 	// Forward the presigned request to AWS using a plain HTTP client
 	//
 
-	// validate presigned request looks like STS GetCallerIdentity
-	if param.Method == "" {
-		response(w, r, http.StatusBadRequest, "missing method in presigned request")
-		return
-	}
-	if param.URL == "" {
-		response(w, r, http.StatusBadRequest, "missing url in presigned request")
+	resp, status, err := awsstsproof.VerifyPresignedGetCallerIdentity(r.Context(),
+		http.DefaultClient, param)
+	if err != nil {
+		response(w, r, status, err.Error())
 		return
 	}
 
-	if param.Method != "GET" {
-		response(w, r, http.StatusBadRequest, "presigned request must be GET")
-		return
-	}
-
-	u, errParse := url.Parse(param.URL)
-	if errParse != nil {
-		response(w, r, http.StatusBadRequest, "invalid url in presigned request")
-		return
-	}
-
-	// require Query Action=GetCallerIdentity
-	if u.Query().Get("Action") != "GetCallerIdentity" {
-		response(w, r, http.StatusBadRequest, "presigned request Action is not GetCallerIdentity")
-		return
-	}
-
-	// require signature: either Authorization header or X-Amz-Signature in query or headers
-	hasAuth := false
-	if _, ok := param.Headers["Authorization"]; ok {
-		hasAuth = true
-	}
-	if u.Query().Get("X-Amz-Signature") != "" {
-		hasAuth = true
-	}
-	if _, ok := param.Headers["X-Amz-Signature"]; ok {
-		hasAuth = true
-	}
-	if !hasAuth {
-		response(w, r, http.StatusBadRequest, "presigned request missing signature")
-		return
-	}
-
-	reqToAws, errReq := http.NewRequestWithContext(r.Context(), param.Method, param.URL, nil)
-	if errReq != nil {
-		response(w, r, http.StatusBadRequest, errReq.Error())
-		return
-	}
-	for k, vv := range param.Headers {
-		for _, v := range vv {
-			reqToAws.Header.Add(k, v)
-		}
-	}
-
-	respAws, errDo := http.DefaultClient.Do(reqToAws)
-	if errDo != nil {
-		response(w, r, http.StatusBadGateway, errDo.Error())
-		return
-	}
-	defer respAws.Body.Close()
-
-	respData, errRead := io.ReadAll(respAws.Body)
-	if errRead != nil {
-		response(w, r, http.StatusBadGateway, errRead.Error())
-		return
-	}
-
-	if respAws.StatusCode != 200 {
-		response(w, r, http.StatusBadGateway, fmt.Sprintf("bad status=%d body:%s", respAws.StatusCode, string(respData)))
-		return
-	}
-
-	// Parse STS GetCallerIdentity XML response
-	var stsResp struct {
-		Result struct {
-			UserID  string `xml:"UserId"`
-			Account string `xml:"Account"`
-			Arn     string `xml:"Arn"`
-		} `xml:"GetCallerIdentityResult"`
-	}
-	if err := xml.Unmarshal(respData, &stsResp); err != nil {
-		log.Printf("xml unmarshal error: %v", err)
-		// return raw AWS body for debugging
-		response(w, r, http.StatusOK, string(respData))
-		return
-	}
-
-	iamARN := stsResp.Result.Arn
+	iamARN := resp.Result.Arn
 	log.Printf("STS gerCallerIdentity ARN: %s", iamARN)
 	response(w, r, http.StatusOK, fmt.Sprintf("getCallerIdentity.ARN=%s", iamARN))
 }

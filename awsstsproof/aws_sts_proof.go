@@ -5,8 +5,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
+	"net/url"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -102,4 +106,99 @@ func PresignGetCallerIdentity(awsConfig aws.Config) (Param, error) {
 	}
 
 	return input, nil
+}
+
+// VerifyResponse represents the response from AWS STS GetCallerIdentity.
+type VerifyResponse struct {
+	Result VerifyResult `xml:"GetCallerIdentityResult"`
+}
+
+// VerifyResult represents the result from AWS STS GetCallerIdentity.
+type VerifyResult struct {
+	UserID  string `xml:"UserId"`
+	Account string `xml:"Account"`
+	Arn     string `xml:"Arn"`
+}
+
+// VerifyPresignedGetCallerIdentity forwards the presigned request to AWS and returns the response.
+func VerifyPresignedGetCallerIdentity(ctx context.Context, client *http.Client,
+	param Param) (VerifyResponse, int, error) {
+
+	//
+	// Forward the presigned request to AWS using a plain HTTP client
+	//
+
+	var resp VerifyResponse
+
+	// validate presigned request looks like STS GetCallerIdentity
+	if param.Method == "" {
+		return resp, http.StatusBadRequest, fmt.Errorf("missing method in presigned request")
+	}
+	if param.URL == "" {
+		return resp, http.StatusBadRequest, fmt.Errorf("missing url in presigned request")
+	}
+
+	if param.Method != "GET" {
+		return resp, http.StatusBadRequest, fmt.Errorf("presigned request must be GET")
+	}
+
+	u, errParse := url.Parse(param.URL)
+	if errParse != nil {
+		return resp, http.StatusBadRequest, fmt.Errorf("invalid url in presigned request")
+	}
+
+	// require Query Action=GetCallerIdentity
+	if u.Query().Get("Action") != "GetCallerIdentity" {
+		return resp, http.StatusBadRequest, fmt.Errorf("presigned request Action is not GetCallerIdentity")
+	}
+
+	// require signature: either Authorization header or X-Amz-Signature in query or headers
+	hasAuth := false
+	if _, ok := param.Headers["Authorization"]; ok {
+		hasAuth = true
+	}
+	if u.Query().Get("X-Amz-Signature") != "" {
+		hasAuth = true
+	}
+	if _, ok := param.Headers["X-Amz-Signature"]; ok {
+		hasAuth = true
+	}
+	if !hasAuth {
+		return resp, http.StatusBadRequest, fmt.Errorf("presigned request missing signature")
+	}
+
+	reqToAws, errReq := http.NewRequestWithContext(ctx, param.Method, param.URL, nil)
+	if errReq != nil {
+		return resp, http.StatusBadRequest, fmt.Errorf("error creating request to AWS: %v", errReq)
+	}
+	for k, vv := range param.Headers {
+		for _, v := range vv {
+			reqToAws.Header.Add(k, v)
+		}
+	}
+
+	respAws, errDo := client.Do(reqToAws)
+	if errDo != nil {
+		return resp, http.StatusBadGateway, fmt.Errorf("error forwarding request to AWS: %v", errDo)
+	}
+	defer respAws.Body.Close()
+
+	respData, errRead := io.ReadAll(respAws.Body)
+	if errRead != nil {
+		return resp, http.StatusBadGateway, fmt.Errorf("error reading response from AWS: %v", errRead)
+	}
+
+	if respAws.StatusCode != 200 {
+		return resp, http.StatusBadGateway, fmt.Errorf("bad status=%d body:%s", respAws.StatusCode, string(respData))
+	}
+
+	// Parse STS GetCallerIdentity XML response
+
+	if err := xml.Unmarshal(respData, &resp); err != nil {
+		log.Printf("xml unmarshal error: %v", err)
+		// return raw AWS body for debugging
+		return resp, http.StatusBadGateway, fmt.Errorf("error parsing AWS response: %v", err)
+	}
+
+	return resp, http.StatusOK, nil
 }
