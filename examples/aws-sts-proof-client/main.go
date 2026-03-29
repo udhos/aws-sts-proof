@@ -46,18 +46,10 @@ func main() {
 		log.Fatalf("presign error: %v", errPresign)
 	}
 
-	headers := http.Header{}
-	// presigned.SignedHeader is a map[string][]string; copy into http.Header
-	for k, vv := range presigned.SignedHeader {
-		for _, v := range vv {
-			headers.Add(k, v)
-		}
-	}
-
 	input := awsstsproof.Param{
 		Method:  presigned.Method,
 		URL:     presigned.URL,
-		Headers: headers,
+		Headers: presigned.SignedHeader,
 	}
 
 	body, errBody := awsstsproof.NewBody(input)
