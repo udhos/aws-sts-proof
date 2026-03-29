@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/udhos/aws-sts-proof/awsstsproof"
 	"github.com/udhos/boilerplate/awsconfig"
 )
@@ -30,27 +29,13 @@ func main() {
 	log.Printf("STS ARN: %s\n", awsCfg.StsArn)
 	log.Printf("STS UserId: %s\n", awsCfg.StsUserID)
 
-	//
-	// sts client
-	//
-
-	clientSts := sts.NewFromConfig(awsCfg.AwsConfig)
-
-	// create a presigned STS GetCallerIdentity request and use it
-	// as the proof request target (URL + signed headers)
-	presignClient := sts.NewPresignClient(clientSts)
-
-	presigned, errPresign := presignClient.PresignGetCallerIdentity(context.TODO(),
-		&sts.GetCallerIdentityInput{})
-	if errPresign != nil {
-		log.Fatalf("presign error: %v", errPresign)
+	input, errSign := awsstsproof.PresignGetCallerIdentity(awsCfg.AwsConfig)
+	if errSign != nil {
+		log.Fatalf("presign error: %v", errSign)
 	}
 
-	input := awsstsproof.Param{
-		Method:  presigned.Method,
-		URL:     presigned.URL,
-		Headers: presigned.SignedHeader,
-	}
+	log.Printf("Presigned STS GetCallerIdentity request: method:%s url:%s headers:%v",
+		input.Method, input.URL, input.Headers)
 
 	body, errBody := awsstsproof.NewBody(input)
 	if errBody != nil {
